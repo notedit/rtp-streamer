@@ -1,5 +1,6 @@
 'use strict'
 
+const util = require('util');
 const getPort = require('get-port');
 const EventEmitter = require('events').EventEmitter;
 const ffmpeg = require('fluent-ffmpeg');
@@ -7,6 +8,86 @@ const transform = require('sdp-transform');
 const streamBuffers = require('stream-buffers');
 
 
+
+class Stream extends EventEmitter
+{
+    constructor(options)
+    {
+        super();
+		this.setMaxListeners(Infinity);
+
+        this.id = options.streamId;
+        this.sdp = options.sdp;
+        this.codecs = options.codecs;
+        this.audioport = options.audioport;
+        this.videoport = options.videoport;
+        this.host = options.host;
+        this.recordCommand = null;
+        this.thumbnailCommand = null;
+
+        this.state = Stream.ready;
+        
+    }
+    startRecording()
+    {
+        let sdpBuffer = new streamBuffers.ReadableStreamBuffer({
+            frequency: 10,       // in milliseconds.
+            chunkSize: 1024     // in bytes.
+        });
+
+        let sdpstr =  transform.write(this.sdp);
+        sdpBuffer.put(sdpstr);
+        
+        let recordName = util.format('%s-%d.webm', this.id,(new Date()).getTime());
+
+        this.recordCommand = ffmpeg(sdpBuffer)
+            .inputOptions(['-re','-protocol_whitelist', 'file,pipe,udp,rtp', '-f', 'sdp','-analyzeduration','10000000'])
+            .on('start', function(commandLine) {
+                console.log('Spawned Ffmpeg with command: ' + commandLine);
+                this.state = Stream.started;
+            })
+            .on('error', function(err, stdout, stderr) {
+                console.log('ffmpeg stderr: ' + stderr);
+                this.close(err);
+            })
+            .on('stderr',function(stderrLine){
+                console.log(stderrLine);
+            })
+            .on('progress', function(progress) {
+                console.log('Processing: frames' + progress.frames + ' currentKbps ' + progress.currentKbps);
+            })
+            .on('end',function() {
+                console.log('ended');
+                this.close();
+            })
+            .output(recordName)
+            .outputOptions([
+                '-c copy',
+                '-f webm' 
+            ])
+            .run();
+
+    }
+    close(error)
+    {
+
+        if(this.state === Stream.closed){
+            return;
+        }
+
+        if(this.recordCommand){
+            this.recordCommand.kill();
+        }
+
+        this.state = Stream.closed
+        this.recordCommand = null;
+        this.emit('close',error);      
+    }
+}
+
+Stream.ready = 'ready';
+Stream.started = 'started';
+Stream.closed = 'closed';
 
 
 class RtpRecorder extends EventEmitter
@@ -21,85 +102,51 @@ class RtpRecorder extends EventEmitter
         this._streams = new Map();
         this._host = '127.0.0.1';
     }
-
-    /*
+    get streams()
     {
-    "audio": {
-        "port": "<int>",
-        "host": "<string>"
-        },
-    "video": {
-        "port": "<int>",
-        "host": "<string>"
-        }
+        return this._streams;
     }
-    */
     async create(streamId,codecs)
     {
-        let stream = {};
+        let options = {
+            streamId:streamId,
+            host:this._host,
+            codecs:codecs
+        };
         let sdp = this.formatSdp();
         for(let codec of codecs){
             if(codec.kind === 'audio'){
                 let audioport = await this.getMediaPort();
-                stream.audio = {
-                    port:audioport,
-                    host:this._host
-                };
+                options.audioport = audioport;
                 let audiosdp = this.formatMediaSdp(codec,audioport);
                 sdp.media.push(audiosdp);
             }
 
             if(codec.kind === 'video'){
                 let videoport = await this.getMediaPort();
-                stream.video = {
-                    port:videoport,
-                    host:this._host
-                };
+                options.videoport = videoport;
                 let videosdp = this.formatMediaSdp(codec,videoport);
                 sdp.media.push(videosdp);
             }
         }
+        options.sdp = sdp;
+        let stream = new Stream(options);
 
-        this._streams.set(streamId,sdp);
-        return stream;
-    }
-    startRecording(streamId)
-    {
-        if(!this._streams.get(streamId)){
-            return;
-        }
-        let sdpBuffer = new streamBuffers.ReadableStreamBuffer({
-            frequency: 10,       // in milliseconds.
-            chunkSize: 2048     // in bytes.
+        stream.on('close',() => {
+            
+            this._streams.delete(stream.id);
         });
 
-        let sdp = this._streams.get(streamId);
-
-        let sdpstr =  transform.write(sdp);
-
-        sdpBuffer.put(sdpstr);
-
-
-        ffmpeg(sdpBuffer)
-        .inputOptions(['-re','-protocol_whitelist', 'file,pipe,udp,rtp', '-f', 'sdp','-analyzeduration','10000000'])
-        .on('start', function(commandLine) {
-                console.log('Spawned Ffmpeg with command: ' + commandLine);
-        })
-        .on('error', function(err, stdout, stderr) {
-
-            console.log('ffmpeg stderr: ' + stderr);
-        })
-        .on('end',function() {
-            console.log('ended');
-        })
-        .outputOptions(['-c', 'copy'])
-        .save(streamId + '.webm');
-
-
+        this._streams.set(streamId,stream);
+        return stream;
     }
-    stopRecording(streamId)
+    stream(streamId)
     {
+        if(!this._streams.get(streamId)){
+            return null;
+        }
 
+        return this._streams.get(streamId);
     }
     formatSdp(streamCodecs)
     {
