@@ -2,7 +2,7 @@
   "name": "rtprecorder",
   "version": "1.0.0",
   "description": "rtp recorder",
-  "main": "index.js",
+  "main": "rtprecorder.js",
   "repository": "git@github.com:notedit/rtprecorder.git",
   "author": "notedit <notedit@gmail.com>",
   "license": "MIT",
