@@ -3,4 +3,16 @@ nodejs  rtp  recorder
 
 
 
-a rtp recorder just like  https://github.com/lynckia/licode/blob/master/erizo/src/erizo/media/ExternalOutput.cpp  but a nodejs lib
+a rtp recorder  use ffmpeg.
+
+
+
+## todo
+
+- snapshot
+
+
+## some article
+
+-  http://www.bogotobogo.com/FFMpeg/ffmpeg_thumbnails_select_scene_iframe.php
+-  http://www.bugcodemaster.com/article/extract-images-frame-frame-video-file-using-ffmpeg
