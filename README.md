@@ -22,17 +22,17 @@ a rtp recorder  use ffmpeg.
 ```
 
 let codecs = [{
-				kind        : 'audio',
-				name        : 'audio/opus',
-                payloadType : 100,
-				clockRate   : 48000
-			},
-			{
-				kind        : 'video',
-				name        : 'video/vp8',
-				payloadType : 110,
-				clockRate   : 90000
-			}];
+        kind        : 'audio',
+        name        : 'audio/opus',
+        payloadType : 100,
+        clockRate   : 48000
+        },
+        {
+        kind        : 'video',
+        name        : 'video/vp8',
+        payloadType : 110,
+        clockRate   : 90000
+        }];
 
 
 let stream = rtprecorder.create('streamId',codecs);
