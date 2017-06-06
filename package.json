@@ -7,8 +7,12 @@
   "author": "notedit <notedit@gmail.com>",
   "license": "MIT",
   "dependencies": {
+    "debug": "^2.6.8",
     "fluent-ffmpeg": "^2.1.2",
     "get-port": "^3.1.0",
+    "portfinder": "^1.0.13",
+    "sdp-transform": "^2.3.0",
+    "stream-buffers": "^3.0.1",
     "string-format": "^0.5.0"
   }
 }

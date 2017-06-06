@@ -1,13 +1,15 @@
 'use strict'
 
+
 const util = require('util');
-const getPort = require('get-port');
+const portfinder = require('portfinder');
 const EventEmitter = require('events').EventEmitter;
 const ffmpeg = require('fluent-ffmpeg');
 const transform = require('sdp-transform');
 const streamBuffers = require('stream-buffers');
 
-
+const debug = require('debug')('debug');
+const error = require('debug')('error');
 
 class Stream extends EventEmitter
 {
@@ -43,21 +45,21 @@ class Stream extends EventEmitter
         this.recordCommand = ffmpeg(sdpBuffer)
             .inputOptions(['-re','-protocol_whitelist', 'file,pipe,udp,rtp', '-f', 'sdp','-analyzeduration','10000000'])
             .on('start', function(commandLine) {
-                console.log('Spawned Ffmpeg with command: ' + commandLine);
+                debug('Spawned Ffmpeg with command: ' + commandLine);
                 this.state = Stream.started;
             })
             .on('error', function(err, stdout, stderr) {
-                console.log('ffmpeg stderr: ' + stderr);
+                debug('ffmpeg stderr: ' + stderr);
                 this.close(err);
             })
             .on('stderr',function(stderrLine){
-                console.log(stderrLine);
+                error(stderrLine);
             })
             .on('progress', function(progress) {
-                console.log('Processing: frames' + progress.frames + ' currentKbps ' + progress.currentKbps);
+                debug('Processing: frames' + progress.frames + ' currentKbps ' + progress.currentKbps);
             })
             .on('end',function() {
-                console.log('ended');
+                debug('ended');
                 this.close();
             })
             .output(recordName)
@@ -90,6 +92,7 @@ Stream.started = 'started';
 Stream.closed = 'closed';
 
 
+
 class RtpRecorder extends EventEmitter
 {
 
@@ -99,8 +102,13 @@ class RtpRecorder extends EventEmitter
         super();
 		this.setMaxListeners(Infinity);
 
+        this._options = options;
         this._streams = new Map();
-        this._host = '127.0.0.1';
+        this._host = options.host;
+        this._minPort = options.minPort || 20000;
+
+        portfinder.basePort = this._minPort;
+        
     }
     get streams()
     {
@@ -133,7 +141,7 @@ class RtpRecorder extends EventEmitter
         let stream = new Stream(options);
 
         stream.on('close',() => {
-            
+
             this._streams.delete(stream.id);
         });
 
@@ -196,7 +204,7 @@ class RtpRecorder extends EventEmitter
     {
         while(true)
         {
-            let port = await getPort();
+            let port = await portfinder.getPortPromise();
             if(!port%2){
                 return port;
             }
