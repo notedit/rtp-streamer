@@ -31,13 +31,8 @@ const codecs = [
 
 
 let streamId = randomstring.generate();
-let stream = recorder(streamId, codecs);
+let stream = await recorder.create(streamId, codecs);
 
-/*
-        this.audioport = options.audioport;
-        this.videoport = options.videoport;
-        this.host = options.host;
-*/
 
 let videoout = 'rtp://' + stream.host + ':' + stream.videoport;
 let audioout = 'rtp://' + stream.host + ':' + stream.audioport;
@@ -57,7 +52,7 @@ ffmpeg('./vp8opus.webm').native()
     ])
     .on('start', function(command) {
          console.log('Spawned Ffmpeg with command: ' + command);
-         
+
          stream.startRecording();
     })
     .on('error', function(err){
