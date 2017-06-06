@@ -92,7 +92,6 @@ Stream.started = 'started';
 Stream.closed = 'closed';
 
 
-
 class RtpRecorder extends EventEmitter
 {
 
@@ -123,25 +122,27 @@ class RtpRecorder extends EventEmitter
         };
         let sdp = this.formatSdp();
         for(let codec of codecs){
-            if(codec.kind === 'audio'){
-                let audioport = await this.getMediaPort();
-                options.audioport = audioport;
-                let audiosdp = this.formatMediaSdp(codec,audioport);
-                sdp.media.push(audiosdp);
-            }
-
             if(codec.kind === 'video'){
                 let videoport = await this.getMediaPort();
+                debug('videoport ',videoport);
                 options.videoport = videoport;
                 let videosdp = this.formatMediaSdp(codec,videoport);
                 sdp.media.push(videosdp);
+            }
+            if(codec.kind === 'audio'){
+                let audioport = await this.getMediaPort();
+                debug('audioport ', audioport);
+                options.audioport = audioport;
+                let audiosdp = this.formatMediaSdp(codec,audioport);
+                sdp.media.push(audiosdp);
             }
         }
         options.sdp = sdp;
         let stream = new Stream(options);
 
-        stream.on('close',() => {
+        debug('new stream ', options);
 
+        stream.on('close',() => {
             this._streams.delete(stream.id);
         });
 
@@ -186,12 +187,18 @@ class RtpRecorder extends EventEmitter
     }
     formatMediaSdp(codec,port)
     {
-        let media = {
-            rtp:[{
+
+        let rtp = {
                 payload:codec.payloadType,
                 codec:codec.name.substr(codec.name.indexOf('/') + 1),
                 rate:codec.clockRate
-            }],
+            };
+
+        if(code.numChannels){
+            rtp.encoding = code.numChannels;
+        }
+        let media = {
+            rtp:[rtp],
             type: codec.kind,
             protocol: 'RTP/AVP',
             port:0,
@@ -212,3 +219,10 @@ class RtpRecorder extends EventEmitter
     }
     
 }
+
+
+module.exports = 
+{
+    Stream:Stream,
+    RtpRecorder:RtpRecorder
+};
