@@ -35,11 +35,7 @@ class Stream extends EventEmitter
     }
     startRecording()
     {
-        let sdpBuffer = new streamBuffers.ReadableStreamBuffer({
-            frequency: 10,       // in milliseconds.
-            chunkSize: 1024     // in bytes.
-        });
-
+        
         let sdpstr =  transform.write(this.sdp);
 
         debug('sdp ', sdpstr);
@@ -69,7 +65,6 @@ class Stream extends EventEmitter
                 debug('ended');
                 self.close(null);
             })
-           
             .outputOptions([
                 '-c copy',
                 '-f webm'
@@ -87,7 +82,6 @@ class Stream extends EventEmitter
         if(this.recordCommand){
             this.recordCommand.kill();
         }
-
         this.state = Stream.closed
         this.recordCommand = null;
         this.emit('close',error);      
@@ -104,9 +98,9 @@ class RtpRecorder extends EventEmitter
 
     constructor(options)
     {
-
+        
         super();
-		this.setMaxListeners(Infinity);
+        this.setMaxListeners(Infinity);
 
         this._options = options;
         this._streams = new Map();
@@ -217,18 +211,14 @@ class RtpRecorder extends EventEmitter
         let port;
         while(true)
         {
-
             port = await getPort();
             if(port%2 == 0){
                 break;
             }
         }
-        
-        return port
-    }
-    
+        return port;
+    }    
 }
-
 
 module.exports = 
 {
