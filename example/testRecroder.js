@@ -1,7 +1,6 @@
 'use strict'
 
 
-
 const randomstring = require("randomstring")
 const Recorder = require('../index').RtpRecorder;
 const ffmpeg =  require('fluent-ffmpeg');
@@ -16,58 +15,82 @@ const recorder  = new Recorder({
 const codecs = [
 			{
 				kind        : 'audio',
-				name        : 'audio/opus',
+				name        : 'audio/OPUS',
                 payloadType : 100,
 				clockRate   : 48000,
                 numChannels : 2,
 			},
 			{
 				kind        : 'video',
-				name        : 'video/vp8',
+				name        : 'video/VP8',
 				payloadType : 110,
 				clockRate   : 90000
 			}
 		];
 
 
-let streamId = randomstring.generate();
-let stream = await recorder.create(streamId, codecs);
 
+let stream;
 
-let videoout = 'rtp://' + stream.host + ':' + stream.videoport;
-let audioout = 'rtp://' + stream.host + ':' + stream.audioport;
+async function startStream()
+{
 
-ffmpeg('./vp8opus.webm').native()
-    .output(videoout)
-    .outputOptions([
-        '-vcodec copy',
-        '-an',
-        '-f rtp'
+    let streamId = randomstring.generate();
+
+    debug('create streamId ', streamId);
+
+    stream = await recorder.create(streamId, codecs);
+
+    let videoout = 'rtp://' + stream.host + ':' + stream.videoport;
+    let audioout = 'rtp://' + stream.host + ':' + stream.audioport;
+
+    debug('video out ',videoout);
+
+    debug('audio out ',audioout);
+
+    ffmpeg('./vp8opus.webm').native()
+        .output(videoout)
+        .outputOptions([
+            '-vcodec copy',
+            '-an',
+            '-f rtp',
+            '-payload_type 110'
+            ])
+        .output(audioout)
+        .outputOptions([
+            '-acodec copy',
+            '-vn',
+            '-f rtp',
+            '-payload_type 100'
         ])
-    .output(audioout)
-    .outputOptions([
-        '-acodec copy',
-        '-vn',
-        '-f rtp'
-    ])
-    .on('start', function(command) {
-         console.log('Spawned Ffmpeg with command: ' + command);
+        .on('start', function(command) {
+            debug('Spawned Ffmpeg with command: ' + command);
+            stream.startRecording();
+        })
+        .on('error', function(err){
+            debug('An error occurred: ' + err);
+        })
+        .on('stderr',function(stderrLine){
+            debug(stderrLine);
+        })
+        .on('progress', function(progress) {
+            //debug('Processing: frames' + progress.frames + ' currentKbps ' + progress.currentKbps);
+        })
+        .on('end',function(){
+            debug('Processing finished !');
+        })
+        .run();
 
-         stream.startRecording();
-    })
-    .on('error', function(err){
-        console.log('An error occurred: ' + err);
-    })
-    .on('stderr',function(stderrLine){
-        console.log(stderrLine);
-    })
-    .on('progress', function(progress) {
-        debug('Processing: frames' + progress.frames + ' currentKbps ' + progress.currentKbps);
-    })
-    .on('end',function(){
-        console.log('Processing finished !');
-    })
-    .run();
+}
+
+debug('before start');
+
+startStream();
+
+
+
+
+
 
 
 

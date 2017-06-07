@@ -1,12 +1,14 @@
 'use strict'
 
 
+const fs  =  require('fs');
 const util = require('util');
-const portfinder = require('portfinder');
+const stream = require('stream');
 const EventEmitter = require('events').EventEmitter;
 const ffmpeg = require('fluent-ffmpeg');
 const transform = require('sdp-transform');
 const streamBuffers = require('stream-buffers');
+const getPort = require('get-port');
 
 const debug = require('debug')('debug');
 const error = require('debug')('error');
@@ -28,6 +30,7 @@ class Stream extends EventEmitter
         this.thumbnailCommand = null;
 
         this.state = Stream.ready;
+        this.recorder = options.recorder;
         
     }
     startRecording()
@@ -38,36 +41,40 @@ class Stream extends EventEmitter
         });
 
         let sdpstr =  transform.write(this.sdp);
-        sdpBuffer.put(sdpstr);
-        
-        let recordName = util.format('%s-%d.webm', this.id,(new Date()).getTime());
 
-        this.recordCommand = ffmpeg(sdpBuffer)
-            .inputOptions(['-re','-protocol_whitelist', 'file,pipe,udp,rtp', '-f', 'sdp','-analyzeduration','10000000'])
+        debug('sdp ', sdpstr);
+        
+        let  bufferStream = new stream.PassThrough();
+        bufferStream.end(new Buffer(sdpstr));
+
+        let recordName = util.format('%s/%s-%d.webm', this.recorder._recorddir,this.id,(new Date()).getTime());
+
+        let self = this;
+
+        this.recordCommand = ffmpeg(bufferStream)
+            .inputOptions(['-protocol_whitelist', 'file,pipe,udp,rtp', '-f', 'sdp'])
             .on('start', function(commandLine) {
                 debug('Spawned Ffmpeg with command: ' + commandLine);
-                this.state = Stream.started;
+                self.state = Stream.started;
             })
             .on('error', function(err, stdout, stderr) {
-                debug('ffmpeg stderr: ' + stderr);
-                this.close(err);
+                error('ffmpeg stderr: ' + stderr);
+                self.close(err);
             })
-            .on('stderr',function(stderrLine){
-                error(stderrLine);
-            })
+        
             .on('progress', function(progress) {
-                debug('Processing: frames' + progress.frames + ' currentKbps ' + progress.currentKbps);
+                //debug('Processing: frames' + progress.frames + ' currentKbps ' + progress.currentKbps);
             })
             .on('end',function() {
                 debug('ended');
-                this.close();
+                self.close(null);
             })
-            .output(recordName)
+           
             .outputOptions([
                 '-c copy',
-                '-f webm' 
+                '-f webm'
             ])
-            .run();
+            .save(recordName);
 
     }
     close(error)
@@ -105,9 +112,7 @@ class RtpRecorder extends EventEmitter
         this._streams = new Map();
         this._host = options.host;
         this._minPort = options.minPort || 20000;
-
-        portfinder.basePort = this._minPort;
-        
+        this._recorddir = options.recorddir || '.';
     }
     get streams()
     {
@@ -138,16 +143,15 @@ class RtpRecorder extends EventEmitter
             }
         }
         options.sdp = sdp;
-        let stream = new Stream(options);
+        options.recorder = this;
+        let rtpstream = new Stream(options);
 
-        debug('new stream ', options);
-
-        stream.on('close',() => {
-            this._streams.delete(stream.id);
+        rtpstream.on('close',() => {
+            this._streams.delete(rtpstream.id);
         });
 
-        this._streams.set(streamId,stream);
-        return stream;
+        this._streams.set(streamId,rtpstream);
+        return rtpstream;
     }
     stream(streamId)
     {
@@ -194,14 +198,14 @@ class RtpRecorder extends EventEmitter
                 rate:codec.clockRate
             };
 
-        if(code.numChannels){
-            rtp.encoding = code.numChannels;
+        if(codec.numChannels){
+            rtp.encoding = codec.numChannels;
         }
         let media = {
             rtp:[rtp],
             type: codec.kind,
             protocol: 'RTP/AVP',
-            port:0,
+            port:port,
             payloads:codec.payloadType
         };
 
@@ -209,13 +213,18 @@ class RtpRecorder extends EventEmitter
     }
     async getMediaPort()
     {
+
+        let port;
         while(true)
         {
-            let port = await portfinder.getPortPromise();
-            if(!port%2){
-                return port;
+
+            port = await getPort();
+            if(port%2 == 0){
+                break;
             }
         }
+        
+        return port
     }
     
 }

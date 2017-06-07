@@ -58,3 +58,7 @@ typings/
 .env
 
 *.lock
+
+*.DS_Store
+
+*.webm
