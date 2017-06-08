@@ -9,9 +9,14 @@ a rtp recorder  use ffmpeg.
 
 ## todo
 
+
+- h264/aac 
 - snapshot
 
 
+
+
+## demo code
 
 ```
 
@@ -29,7 +34,8 @@ let codecs = [{
         }];
 
 
-let stream = rtprecorder.create('streamId',codecs);
+let streamId = 'some streamId';
+let stream = await rtprecorder.create(streamId,codecs);
 
 
 //  some  audio/video port forward
