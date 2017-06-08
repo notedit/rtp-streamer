@@ -1,19 +1,13 @@
 # rtprecorder
-nodejs  rtp  recorder
+nodejs rtp recorder
 
+it is used to record webrtc stream.
 
-
-a rtp recorder  use ffmpeg.
-
-
+the file is save to .mkv file.
 
 ## todo
 
-
-- h264/aac 
 - snapshot
-
-
 
 
 ## demo code
@@ -43,8 +37,7 @@ let stream = await rtprecorder.create(streamId,codecs);
 
 // after port forwarding  now we can record 
 
+let recordId = 'recordId';
 
-stream.startRecording();
-
-
+stream.startRecording(recordId);
 ```

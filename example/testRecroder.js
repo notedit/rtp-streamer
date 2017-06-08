@@ -65,7 +65,9 @@ async function startStream()
         ])
         .on('start', function(command) {
             debug('Spawned Ffmpeg with command: ' + command);
-            stream.startRecording();
+
+            let recordId = randomstring.generate(); 
+            stream.startRecording(recordId);
         })
         .on('error', function(err){
             debug('An error occurred: ' + err);

@@ -7,7 +7,6 @@ const stream = require('stream');
 const EventEmitter = require('events').EventEmitter;
 const ffmpeg = require('fluent-ffmpeg');
 const transform = require('sdp-transform');
-const streamBuffers = require('stream-buffers');
 const getPort = require('get-port');
 
 const debug = require('debug')('debug');
@@ -33,7 +32,7 @@ class Stream extends EventEmitter
         this.recorder = options.recorder;
         
     }
-    startRecording()
+    startRecording(recordId)
     {
         
         let sdpstr =  transform.write(this.sdp);
@@ -43,7 +42,7 @@ class Stream extends EventEmitter
         let  bufferStream = new stream.PassThrough();
         bufferStream.end(new Buffer(sdpstr));
 
-        let recordName = util.format('%s/%s-%d.webm', this.recorder._recorddir,this.id,(new Date()).getTime());
+        let recordName = util.format('%s/%s.mkv', this.recorder._recorddir,recordId);
 
         let self = this;
 
@@ -57,7 +56,6 @@ class Stream extends EventEmitter
                 error('ffmpeg stderr: ' + stderr);
                 self.close(err);
             })
-        
             .on('progress', function(progress) {
                 //debug('Processing: frames' + progress.frames + ' currentKbps ' + progress.currentKbps);
             })
@@ -67,7 +65,7 @@ class Stream extends EventEmitter
             })
             .outputOptions([
                 '-c copy',
-                '-f webm'
+                '-f matroska'
             ])
             .save(recordName);
 
