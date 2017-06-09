@@ -40,7 +40,7 @@ async function testMKVStream()
 
     debug('create streamId ', streamId);
 
-    stream = await recorder.create(streamId, OutputTypes.MKV);
+    stream = recorder.create(streamId, OutputTypes.MKV);
 
     await stream.enableVideo(videoCodec);
     await stream.enableAudio(audioCodec);
