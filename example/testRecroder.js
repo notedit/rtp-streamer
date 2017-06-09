@@ -5,6 +5,7 @@ const randomstring = require("randomstring")
 const Recorder = require('../index').RtpRecorder;
 const ffmpeg =  require('fluent-ffmpeg');
 
+const OutputTypes = require('../index').OutputTypes;
 const debug = require('debug')('debug');
 
 const recorder  = new Recorder({
@@ -12,34 +13,38 @@ const recorder  = new Recorder({
 });
 
 
-const codecs = [
-			{
+const audioCodec = {
 				kind        : 'audio',
 				name        : 'audio/OPUS',
                 payloadType : 100,
 				clockRate   : 48000,
                 numChannels : 2,
-			},
+			};
+
+
+const videoCodec = 
 			{
 				kind        : 'video',
 				name        : 'video/VP8',
 				payloadType : 110,
 				clockRate   : 90000
-			}
-		];
-
+			};
 
 
 let stream;
 
-async function startStream()
+async function testMKVStream()
 {
 
     let streamId = randomstring.generate();
 
     debug('create streamId ', streamId);
 
-    stream = await recorder.create(streamId, codecs);
+    stream = await recorder.create(streamId, OutputTypes.MKV);
+
+    await stream.enableVideo(videoCodec);
+    await stream.enableAudio(audioCodec);
+
 
     let videoout = 'rtp://' + stream.host + ':' + stream.videoport;
     let audioout = 'rtp://' + stream.host + ':' + stream.audioport;
@@ -67,7 +72,7 @@ async function startStream()
             debug('Spawned Ffmpeg with command: ' + command);
 
             let recordId = randomstring.generate(); 
-            stream.startRecording(recordId);
+            stream.startRecording();
         })
         .on('error', function(err){
             debug('An error occurred: ' + err);
@@ -85,9 +90,11 @@ async function startStream()
 
 }
 
+
+
 debug('before start');
 
-startStream();
+testMKVStream();
 
 
 
