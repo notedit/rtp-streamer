@@ -53,7 +53,8 @@ class Stream extends EventEmitter
     {
         this.videoCodec = codec;
         this.formatMediaSdp(codec);
-        this.videoport = await this.getMediaPort();
+        //this.videoport = await this.getMediaPort();
+        this.videoport = 10000;
         this.videoMedisSdp.port = this.videoport;
         this.sdp.media.push(this.videoMedisSdp);
     }
@@ -61,7 +62,8 @@ class Stream extends EventEmitter
     {
         this.audioCodec = codec;
         this.formatMediaSdp(codec);
-        this.audioport = await this.getMediaPort();
+        //this.audioport = await this.getMediaPort();
+        this.audioport = 10002;
         this.audioMediaSdp.port = this.audioport;
         this.sdp.media.push(this.audioMediaSdp);
     }
@@ -108,12 +110,13 @@ class Stream extends EventEmitter
                 outputOptions.unshift('-vcodec copy');
             }
             if(this.audioCodec){
+                outputOptions.unshift('-ar 44100');
                 outputOptions.unshift('-acodec aac');
             }
 
             this.rtmpURL = this.recorder._rtmpbase + this.id;
             this.recordCommand.output(this.rtmpURL)
-                outputOptions(outputOptions);
+                .outputOptions(this.rtmpURL);
         }
 
         this.recordCommand.run();
