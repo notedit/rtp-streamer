@@ -80,7 +80,9 @@ class Stream extends EventEmitter
         let self = this;
 
         this.recordCommand = ffmpeg(sdpStream)
-            .inputOptions(['-protocol_whitelist', 'file,pipe,udp,rtp', '-f', 'sdp'])
+            .inputOptions(['-protocol_whitelist', 'file,pipe,udp,rtp', '-f', 'sdp',
+                '-analyzeduration 11000000'
+            ])
             .on('start', function(commandLine) {
                 debug('Spawned Ffmpeg with command: ' + commandLine);
                 self.state = Stream.started;
@@ -104,7 +106,7 @@ class Stream extends EventEmitter
                     ]);
 
         } else if(OutputTypes.RTMP === this.outputType){
-            let outputOptions = ['-f flv'];
+            let outputOptions = ['-f flv','-max_muxing_queue_size 400'];
 
             if(this.videoCodec){
                 outputOptions.unshift('-vcodec libx264');
@@ -133,7 +135,11 @@ class Stream extends EventEmitter
         }
         this.state = Stream.closed
         this.recordCommand = null;
-        this.emit('close',error);      
+        if(!error){
+            this.emit('finished', null);
+        }   
+        this.emit('close',error);  
+ 
     }
     async getMediaPort()
     {
