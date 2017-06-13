@@ -116,7 +116,7 @@ class Stream extends EventEmitter
 
             this.rtmpURL = this.recorder._rtmpbase + this.id;
             this.recordCommand.output(this.rtmpURL)
-                .outputOptions(this.rtmpURL);
+                .outputOptions(outputOptions);
         }
 
         this.recordCommand.run();
