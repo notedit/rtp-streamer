@@ -109,7 +109,7 @@ class Stream extends EventEmitter
             let outputOptions = ['-f flv','-max_muxing_queue_size 400'];
 
             if(this.videoCodec){
-                outputOptions.unshift('-vcodec libx264');
+                outputOptions.unshift('-vcodec copy');
             }
             if(this.audioCodec){
                 outputOptions.unshift('-ar 44100');
