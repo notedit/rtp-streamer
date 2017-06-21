@@ -33,7 +33,7 @@ class Stream extends EventEmitter
         this.audioCodec = null;
         this.videoCodec = null;
         this.audioMediaSdp = null;
-        this.videoMedisSdp = null;
+        this.videoMediaSdp = null;
         this.audioport = options.audioport || null;
         this.videoport = options.videoport || null;
         this.host = options.host;
@@ -53,17 +53,15 @@ class Stream extends EventEmitter
     {
         this.videoCodec = codec;
         this.formatMediaSdp(codec);
-        //this.videoport = await this.getMediaPort();
-        this.videoport = 10000;
-        this.videoMedisSdp.port = this.videoport;
-        this.sdp.media.push(this.videoMedisSdp);
+        this.videoport = await this.getMediaPort();
+        this.videoMediaSdp.port = this.videoport;
+        this.sdp.media.push(this.videoMediaSdp);
     }
     async enableAudio(codec)
     {
         this.audioCodec = codec;
         this.formatMediaSdp(codec);
-        //this.audioport = await this.getMediaPort();
-        this.audioport = 10002;
+        this.audioport = await this.getMediaPort();
         this.audioMediaSdp.port = this.audioport;
         this.sdp.media.push(this.audioMediaSdp);
     }
@@ -168,18 +166,54 @@ class Stream extends EventEmitter
         }
         let media = {
             rtp:[],
-            type: codec.kind,
+            type: codec.name.substr(0,codec.name.indexOf('/')),
             protocol: 'RTP/AVP',
             port:0,
             payloads:codec.payloadType
         };
 
+        if(codec.parameters) {
+            let configs = [];
+
+            for(let parameter in codec.parameters) {
+                let parameterName = parameter.split(/(?=[A-Z])/).join('-').toLowerCase();
+                configs.push(parameterName + '=' + codec.parameters[parameter]);
+            }
+            
+            if(configs.length) {
+                if(!media.fmtp) {
+                    media.fmtp = [];
+                }
+
+                media.fmtp.push({
+                    payload: codec.payloadType,
+                    config: configs.join(';')
+                });	
+            }
+        }
+
+        if(codec.rtcpFeedback && codec.rtcpFeedback.length) {
+            if(!media.rtcpFb) {
+                media.rtcpFb = [];
+            }
+            for(let j = 0; j < codec.rtcpFeedback.length; j++) {
+                let rtcpFeedback = codec.rtcpFeedback[j];
+                media.rtcpFb.push({
+                    payload: codec.payloadType,
+                    type: rtcpFeedback.type,
+                    subtype: rtcpFeedback.parameter,
+                });
+            }
+        }
+
         media.rtp.push(rtp);
-        if(codec.kind === 'video'){
-            this.videoMedisSdp = media;
+        if(codec.name.startsWith('video')){
+            this.videoMediaSdp = media;
         } else {
             this.audioMediaSdp = media;
         }
+
+        
 
     }
     initSdp()
