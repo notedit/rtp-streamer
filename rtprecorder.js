@@ -78,8 +78,12 @@ class Stream extends EventEmitter
         let self = this;
 
         this.recordCommand = ffmpeg(sdpStream)
-            .inputOptions(['-protocol_whitelist', 'file,pipe,udp,rtp', '-f', 'sdp',
-                '-analyzeduration 11000000'
+            .inputOptions([
+                    '-protocol_whitelist', 
+                    'file,pipe,udp,rtp', 
+                    '-f', 'sdp',
+                    '-acodec libopus',
+                    '-analyzeduration 11000000'
             ])
             .on('start', function(commandLine) {
                 debug('Spawned Ffmpeg with command: ' + commandLine);
@@ -99,6 +103,9 @@ class Stream extends EventEmitter
             this.recordCommand.output(this.recordFilePath)
                 .outputOptions([
                     '-y',
+                    '-r:v 20',
+                    '-copyts',
+                    '-vsync 1',
                     '-c copy',
                     '-f matroska'
                     ]);
@@ -107,9 +114,12 @@ class Stream extends EventEmitter
             let outputOptions = ['-f flv','-max_muxing_queue_size 400'];
 
             if(this.videoCodec){
-                outputOptions.unshift('-vcodec copy');
+                outputOptions.unshift('-vcodec libx264');
             }
             if(this.audioCodec){
+                outputOptions.unshift('-r:v 20');
+                outputOptions.unshift('-copyts');
+                outputOptions.unshift('-copytb 1');
                 outputOptions.unshift('-ar 44100');
                 outputOptions.unshift('-acodec aac');
             }
