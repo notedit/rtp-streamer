@@ -10,7 +10,6 @@ the file is save to .mkv file.
 - save to mkv file
 - rtmp out  
 
-rtmp out can not work well yet.
 
 ## demo code
 
