@@ -11,6 +11,16 @@ the file is save to .mkv file.
 - rtmp out  
 
 
+## install 
+
+
+```
+
+npm install rtprecorder
+
+```
+
+
 ## demo code
 
 ```
