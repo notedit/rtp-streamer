@@ -8,8 +8,6 @@ the file is save to .mkv file.
 ## fetures
 
 - save to mkv file
-- rtmp out  
-
 
 ## install 
 
@@ -46,16 +44,14 @@ let audioCodec =
 
 let streamId = 'some streamId';
 
-let stream =  recorder.create(streamId, OutputTypes.MKV);
+let stream =  recorder.create(streamId);
 
 await stream.enableVideo(videoCodec);
 await stream.enableAudio(audioCodec);
 
 //  some  audio/video port forward
 
-
 // after port forwarding  now we can record 
-
 
 stream.startRecording();
 ```

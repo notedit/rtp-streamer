@@ -41,7 +41,7 @@ class Stream extends EventEmitter
 
         this.state = Stream.ready;
         this.recorder = options.recorder;
-        this.outputType = options.outputType;
+        this.outputType = OutputTypes.MKV;
 
         this.rtmpURL = null;
         this.recordFilePath = null;
@@ -110,7 +110,7 @@ class Stream extends EventEmitter
                     '-f matroska'
                     ]);
 
-        } else if(OutputTypes.RTMP === this.outputType){
+        } else if(OutputTypes.RTMP === this.outputType){ // we disable rtmp for now 
             let outputOptions = ['-f flv','-max_muxing_queue_size 400'];
 
             if(this.videoCodec){
@@ -272,25 +272,17 @@ class RtpRecorder extends EventEmitter
         this._host = options.host;
         this._minPort = options.minPort || 20000;
         this._recorddir = options.recorddir || '.';
-        this._rtmpbase = options.rtmpbase || '';
     }
     get streams()
     {
         return this._streams;
     }
-    create(streamId,outputType)
+    create(streamId)
     {
         let options = {
             streamId:streamId,
-            host:this._host,
-            outputType:outputType
+            host:this._host
         };
-
-        if(outputType === OutputTypes.RTMP){
-            if(!this._rtmpbase){
-                throw new Error('rtmp must with rtmpbase');
-            }
-        }
 
         options.recorder = this;
         let rtpstream = new Stream(options);
@@ -314,7 +306,6 @@ class RtpRecorder extends EventEmitter
 
 module.exports = 
 {
-    OutputTypes:OutputTypes,
     Stream:Stream,
     RtpRecorder:RtpRecorder
 };
