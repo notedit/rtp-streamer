@@ -1,5 +1,5 @@
-# rtprecorder
-nodejs rtp recorder
+# rtpstreamer
+nodejs rtp streamer
 
 it is used to record webrtc stream.
 
@@ -8,6 +8,7 @@ the file is save to .mkv file.
 ## fetures
 
 - save to mkv file
+- stream to rtmp 
 
 ## install 
 
