@@ -1,10 +1,10 @@
 'use strict'
 
-const recorder = require('./rtprecorder');
+const streamer = require('./rtpstreamer');
 
 
 module.exports = 
 {
-    Stream:recorder.Stream,
-    RtpRecorder:recorder.RtpRecorder
+    OutputTypes:streamer.OutputTypes,
+    Stream:streamer.Stream
 };

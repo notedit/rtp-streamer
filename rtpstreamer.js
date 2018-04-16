@@ -14,7 +14,6 @@ const debug = require('debug')('debug');
 const error = require('debug')('error');
 
 
-
 const OutputTypes = {
 	RTMP: 1,
 	MKV: 2
@@ -29,6 +28,7 @@ class Stream extends EventEmitter
         this.setMaxListeners(Infinity);
 
         this.id = options.streamId;
+        this.rtmpURL = 
         this.sdp = null
         this.audioCodec = null;
         this.videoCodec = null;
@@ -40,32 +40,45 @@ class Stream extends EventEmitter
         this.recordCommand = null;
 
         this.state = Stream.ready;
-        this.recorder = options.recorder;
-        this.outputType = OutputTypes.MKV;
+        this.outputType = options.outputType || OutputTypes.MKV;
 
-        this.rtmpURL = null;
-        this.recordFilePath = null;
+        this.rtmpURL = options.rtmpURL || null;
+        this.recorddir = options.recorddir || './';
 
         this.initSdp();
 
     }
-    async enableVideo(codec)
+    async enableVideo(codec,payloadType,clockRate)
     {
-        this.videoCodec = codec;
-        this.formatMediaSdp(codec);
+        let _codec = {
+            kind: 'video',
+            codec: codec,
+            payloadType : payloadType,
+            clockRate : clockRate
+        }
+        this.videoCodec = _codec;
+        this.formatMediaSdp(_codec);
+
         this.videoport = await this.getMediaPort();
         this.videoMediaSdp.port = this.videoport;
         this.sdp.media.push(this.videoMediaSdp);
     }
-    async enableAudio(codec)
+    async enableAudio(codec,payloadType,channels,clockRate)
     {
-        this.audioCodec = codec;
-        this.formatMediaSdp(codec);
+        let _codec = {
+            kind: 'audio',
+            codec: codec,
+            payloadType : payloadType,
+            clockRate : clockRate,
+            numChannels : channels
+        }
+        this.audioCodec = _codec;
+        this.formatMediaSdp(_codec);
         this.audioport = await this.getMediaPort();
         this.audioMediaSdp.port = this.audioport;
         this.sdp.media.push(this.audioMediaSdp);
     }
-    startRecording()
+    start()
     {
 
         let sdpstr =  transform.write(this.sdp);
@@ -99,7 +112,7 @@ class Stream extends EventEmitter
             });   
         
         if(OutputTypes.MKV === this.outputType){
-            this.recordFilePath = path.join(this.recorder._recorddir,this.id + '.mkv');
+            this.recordFilePath = path.join(this.recorddir,this.id + '.mkv');
             this.recordCommand.output(this.recordFilePath)
                 .outputOptions([
                     '-y',
@@ -111,10 +124,11 @@ class Stream extends EventEmitter
                     ]);
 
         } else if(OutputTypes.RTMP === this.outputType){ // we disable rtmp for now 
-            let outputOptions = ['-f flv','-max_muxing_queue_size 400'];
+            let outputOptions = ['-f flv',];
 
+            // only 264 for now 
             if(this.videoCodec){
-                outputOptions.unshift('-vcodec libx264');
+                outputOptions.unshift('-vcodec copy');
             }
             if(this.audioCodec){
                 outputOptions.unshift('-r:v 20');
@@ -124,8 +138,8 @@ class Stream extends EventEmitter
                 outputOptions.unshift('-acodec aac');
             }
 
-            this.rtmpURL = this.recorder._rtmpbase + this.id;
-            this.recordCommand.output(this.rtmpURL)
+            let rtmpaddress = this.rtmpURL + '/' + this.id;
+            this.recordCommand.output(this.rtmpaddress)
                 .outputOptions(outputOptions);
         }
 
@@ -167,7 +181,7 @@ class Stream extends EventEmitter
 
         let rtp = {
             payload:codec.payloadType,
-            codec:codec.name.substr(codec.name.indexOf('/') + 1),
+            codec:codec.name,
             rate:codec.clockRate
         };
 
@@ -176,7 +190,7 @@ class Stream extends EventEmitter
         }
         let media = {
             rtp:[],
-            type: codec.name.substr(0,codec.name.indexOf('/')),
+            type: codec.kind,
             protocol: 'RTP/AVP',
             port:0,
             payloads:codec.payloadType
@@ -217,13 +231,11 @@ class Stream extends EventEmitter
         }
 
         media.rtp.push(rtp);
-        if(codec.name.startsWith('video')){
+        if(codec.kind === 'video'){
             this.videoMediaSdp = media;
         } else {
             this.audioMediaSdp = media;
         }
-
-        
 
     }
     initSdp()
@@ -258,54 +270,8 @@ Stream.started = 'started';
 Stream.closed = 'closed';
 
 
-class RtpRecorder extends EventEmitter
-{
-
-    constructor(options)
-    {
-        
-        super();
-        this.setMaxListeners(Infinity);
-
-        this._options = options;
-        this._streams = new Map();
-        this._host = options.host;
-        this._minPort = options.minPort || 20000;
-        this._recorddir = options.recorddir || '.';
-    }
-    get streams()
-    {
-        return this._streams;
-    }
-    create(streamId)
-    {
-        let options = {
-            streamId:streamId,
-            host:this._host
-        };
-
-        options.recorder = this;
-        let rtpstream = new Stream(options);
-
-        rtpstream.on('close',(err) => {
-            this._streams.delete(rtpstream.id);
-        });
-
-        this._streams.set(streamId,rtpstream);
-        return rtpstream;
-    }
-    stream(streamId)
-    {
-        if(!this._streams.get(streamId)){
-            return null;
-        }
-
-        return this._streams.get(streamId);
-    }
-}
-
 module.exports = 
 {
     Stream:Stream,
-    RtpRecorder:RtpRecorder
+    OutputTypes:OutputTypes
 };
