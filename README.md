@@ -27,18 +27,18 @@ npm install rtprecorder
 
 let videoCodec =
         {
-        kind        : 'audio',
-        name        : 'audio/opus',
-        payloadType : 100,
-        clockRate   : 48000
-        };
-
-let audioCodec =  
-        {
         kind        : 'video',
         name        : 'video/vp8',
         payloadType : 110,
         clockRate   : 90000
+        };
+
+let audioCodec =  
+        {
+        kind        : 'audio',
+        name        : 'audio/opus',
+        payloadType : 100,
+        clockRate   : 48000
         };
 
 
