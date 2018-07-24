@@ -10,191 +10,185 @@ const ffmpeg = require('fluent-ffmpeg');
 const transform = require('sdp-transform');
 const getPort = require('get-port');
 
-const debug = require('debug')('debug');
-const error = require('debug')('error');
 
-
-const OutputTypes = {
-	RTMP: 1,
-	MKV: 2
+const STATE = {
+    ready:'ready',
+    started:'started',
+    closed:'closed'
 }
 
 
-class Stream extends EventEmitter
+async function getMediaPort()
 {
+
+    let port;
+    while(true)
+    {
+        port = await getPort();
+        if(port%2 == 0){
+            break;
+        }
+    }
+    return port;
+}
+
+class RTMPStreamer extends EventEmitter 
+{
+    /*
+    
+    */
     constructor(options)
     {
         super();
-        this.setMaxListeners(Infinity);
 
-        this.id = options.streamId;
-        this.rtmpURL = 
-        this.sdp = null
+        this.rtmpURL = options.rtmpURL;
+       
         this.audioCodec = null;
         this.videoCodec = null;
-        this.audioMediaSdp = null;
-        this.videoMediaSdp = null;
-        this.audioport = options.audioport || null;
-        this.videoport = options.videoport || null;
-        this.host = options.host;
-        this.recordCommand = null;
+        this.audioPort = options.audioPort || null;
+        this.videoPort = options.videoPort || null;
+        this.command = null;
 
-        this.state = Stream.ready;
-        this.outputType = options.outputType || OutputTypes.MKV;
-
-        this.rtmpURL = options.rtmpURL || null;
-        this.recorddir = options.recorddir || './';
-
-        this.initSdp();
-
+        this.state = STATE.ready;
+        this.sdp = this._initSDP();
     }
-    async enableVideo(codec,payloadType,clockRate)
-    {
-        let _codec = {
-            kind: 'video',
-            codec: codec,
-            payloadType : payloadType,
-            clockRate : clockRate
-        }
-        this.videoCodec = _codec;
-        this.formatMediaSdp(_codec);
 
-        this.videoport = await this.getMediaPort();
-        this.videoMediaSdp.port = this.videoport;
-        this.sdp.media.push(this.videoMediaSdp);
-    }
-    async enableAudio(codec,payloadType,channels,clockRate)
+    start() 
     {
-        let _codec = {
-            kind: 'audio',
-            codec: codec,
-            payloadType : payloadType,
-            clockRate : clockRate,
-            numChannels : channels
-        }
-        this.audioCodec = _codec;
-        this.formatMediaSdp(_codec);
-        this.audioport = await this.getMediaPort();
-        this.audioMediaSdp.port = this.audioport;
-        this.sdp.media.push(this.audioMediaSdp);
-    }
-    start()
-    {
-
         let sdpstr =  transform.write(this.sdp);
-
-        debug('sdp ', sdpstr);
-        
         let sdpStream = new stream.PassThrough();
         sdpStream.end(new Buffer(sdpstr));
 
-        let self = this;
+        this.command = ffmpeg(sdpStream)
 
-        this.recordCommand = ffmpeg(sdpStream)
-            .inputOptions([
-                    '-protocol_whitelist', 
-                    'file,pipe,udp,rtp', 
-                    '-f', 'sdp',
-                    '-acodec libopus',
-                    '-analyzeduration 11000000'
-            ])
-            .on('start', function(commandLine) {
-                debug('Spawned Ffmpeg with command: ' + commandLine);
-                self.state = Stream.started;
-            })
-            .on('error', function(err, stdout, stderr) {
-                error('ffmpeg stderr: ' + stderr);
-                self.close(err);
-            })
-            .on('end',function() {
-                debug('ended');
-                self.close(null);
-            });   
-        
-        if(OutputTypes.MKV === this.outputType){
-            this.recordFilePath = path.join(this.recorddir,this.id + '.mkv');
-            this.recordCommand.output(this.recordFilePath)
-                .outputOptions([
-                    '-y',
-                    '-r:v 20',
-                    '-copyts',
-                    '-vsync 1',
-                    '-c copy',
-                    '-f matroska'
-                    ]);
+        // input options 
+        let inputOptions = [
+            '-protocol_whitelist', 
+            'file,pipe,udp,rtp', 
+            '-f', 'sdp',
+            '-analyzeduration 11000000',
+        ];
 
-        } else if(OutputTypes.RTMP === this.outputType){ // we disable rtmp for now 
-            let outputOptions = ['-f flv',];
-
-            // only 264 for now 
-            if(this.videoCodec){
-                outputOptions.unshift('-vcodec copy');
-            }
-            if(this.audioCodec){
-                outputOptions.unshift('-r:v 20');
-                outputOptions.unshift('-copyts');
-                outputOptions.unshift('-copytb 1');
-                outputOptions.unshift('-ar 44100');
-                outputOptions.unshift('-acodec aac');
-            }
-
-            let rtmpaddress = this.rtmpURL + '/' + this.id;
-            this.recordCommand.output(this.rtmpaddress)
-                .outputOptions(outputOptions);
+        if (this.audioCodec && this.audioCodec.codec === 'opus') {
+            inputOptions.push('-acodec libopus')
         }
 
-        this.recordCommand.run();
+        this.command.inputOptions(inputOptions)
+            .on('start', (commandLine) => {
+                console.log('ffmpeg command : ',  commandLine);
+                this.state = STATE.started;
+                this.emit('start', commandLine)
+            })
+            .on('error', (err, stdout, stderr) => {
+                console.error('ffmpeg stdout: ', stdout);
+                console.error('ffmpeg stderr: ', stderr);
+                this.close(err);
+            })
+            .on('end',() => {
+                console.log('ended');
+                this.close(null);
+            });
 
+        let outputOptions = [];
+
+        // outputOptions 
+        if(this.videoCodec) {
+            if (this.videoCodec.codec === 'h264'){
+                outputOptions.push('-vcodec copy');
+            } else {
+                outputOptions.push('-vcodec libx264');
+                outputOptions.push('-preset ultrafast');
+                outputOptions.push('-crf 0');
+            }
+        }
+
+        if(this.audioCodec){
+            outputOptions.push('-acodec aac');
+            outputOptions.push('-ar 44100');
+            outputOptions.push('-copytb 1');
+            outputOptions.push('-copyts');
+            outputOptions.push('-r:v 20');
+        }
+
+        this.command.output(this.rtmpURL)
+            .outputOptions(outputOptions);
+
+        this.command.run();
     }
-    close(error)
+
+    close(reason) 
     {
-        if(this.state === Stream.closed){
+        if(this.state === STATE.closed){
             return;
         }
 
-        if(this.recordCommand){
-            this.recordCommand.kill();
+        if(this.command){
+            this.command.kill();
         }
-        this.state = Stream.closed
-        this.recordCommand = null;
-        if(!error){
-            this.emit('finished', null);
-        }   
-        this.emit('close',error);  
- 
-    }
-    async getMediaPort()
-    {
+        this.state = STATE.closed
+        this.command  = null;
 
-        let port;
-        while(true)
-        {
-            port = await getPort();
-            if(port%2 == 0){
-                break;
-            }
-        }
-        return port;
+        this.emit('close',reason);   
     }
-    formatMediaSdp(codec)
+
+    _initSDP()
+    {
+        const medias = [];
+
+        if (this.audioCodec) {
+            medias.push(this.audioCodec,'audio',this.audioPort)
+        }
+
+        if (this.videoCodec) {
+            medias.push(this.videoCodec,'video',this.videoPort)
+        }
+
+        const sdp = {
+            version:0,
+            origin:{
+                username:'-',
+                sessionId: 0,
+                sessionVersion: 0,
+                netType: 'IN',
+                ipVer: 4,
+                address: this.host
+            },
+            name:'-',
+            timing:{
+                start:0,
+                stop:0
+            },
+            connection: {
+                version: 4, 
+                ip: this.host
+            },
+            media:medias
+        };
+
+        return sdp
+
+    }
+    _mediaSDP(codec,kind,port)
     {
 
         let rtp = {
-            payload:codec.payloadType,
-            codec:codec.name,
-            rate:codec.clockRate
+            payload:codec.payload,
+            codec:codec.codec, // h264 or other 
+            rate:codec.rate
         };
 
-        if(codec.numChannels){
-            rtp.encoding = codec.numChannels;
+        if(codec.channels){
+            rtp.encoding = codec.channels;
         }
-        let media = {
+        const media = {
             rtp:[],
-            type: codec.kind,
+            type: kind,  // audio or video 
             protocol: 'RTP/AVP',
-            port:0,
-            payloads:codec.payloadType
+            port:port,
+            payloads:codec.payload
         };
+
+        media.rtp.push(rtp);
 
         if(codec.parameters) {
             let configs = [];
@@ -208,49 +202,127 @@ class Stream extends EventEmitter
                 if(!media.fmtp) {
                     media.fmtp = [];
                 }
-
                 media.fmtp.push({
-                    payload: codec.payloadType,
+                    payload: codec.payload,
                     config: configs.join(';')
                 });	
             }
         }
 
-        if(codec.rtcpFeedback && codec.rtcpFeedback.length) {
-            if(!media.rtcpFb) {
-                media.rtcpFb = [];
-            }
-            for(let j = 0; j < codec.rtcpFeedback.length; j++) {
-                let rtcpFeedback = codec.rtcpFeedback[j];
-                media.rtcpFb.push({
-                    payload: codec.payloadType,
-                    type: rtcpFeedback.type,
-                    subtype: rtcpFeedback.parameter,
-                });
-            }
-        }
-
-        media.rtp.push(rtp);
-        if(codec.kind === 'video'){
-            this.videoMediaSdp = media;
-        } else {
-            this.audioMediaSdp = media;
-        }
-
+        return media
     }
-    initSdp()
+}
+
+
+class RecordStreamer extends EventEmitter 
+{
+    constructor(options)
     {
-        this.sdp = {
+        super();
+
+        this.id = options.id;
+
+        this.audioCodec = null;
+        this.videoCodec = null;
+        this.audioPort = options.audioPort || null;
+        this.videoPort = options.videoPort || null;
+        this.command = null;
+
+        this.state = STATE.ready;
+        this.filename = options.filename;
+
+        this.sdp = this._initSDP();
+    }
+
+    start() 
+    {
+        let sdpstr =  transform.write(this.sdp);
+        let sdpStream = new stream.PassThrough();
+        sdpStream.end(new Buffer(sdpstr));
+
+        this.command = ffmpeg(sdpStream)
+
+        // input options 
+        let inputOptions = [
+            '-protocol_whitelist', 
+            'file,pipe,udp,rtp', 
+            '-f', 'sdp',
+            '-analyzeduration 11000000',
+        ];
+
+        if (this.audioCodec && this.audioCodec.codec === 'opus') {
+            inputOptions.push('-acodec libopus')
+        }
+
+        this.command.inputOptions(inputOptions)
+            .on('start', (commandLine) => {
+                console.log('ffmpeg command : ',  commandLine);
+                this.state = STATE.started;
+                this.emit('start', commandLine)
+            })
+            .on('error', (err, stdout, stderr) => {
+                console.error('ffmpeg stdout: ', stdout);
+                console.error('ffmpeg stderr: ', stderr);
+                this.close(err);
+            })
+            .on('end',() => {
+                console.log('ended');
+                this.close(null);
+            });
+
+        let outputOptions = [
+            '-y',
+            '-r:v 20',
+            '-copyts',
+            '-vsync 1',
+            '-c copy',
+            '-f matroska'
+        ];
+
+        this.command.output(this.filename)
+            .outputOptions(outputOptions);
+
+        this.command.run();
+    }
+
+    close(reason) 
+    {
+        if(this.state === STATE.closed){
+            return;
+        }
+
+        if(this.command){
+            this.command.kill();
+        }
+        this.state = STATE.closed
+        this.command  = null;
+
+        this.emit('close',reason);   
+    }
+
+    _initSDP()
+    {
+        const medias = [];
+
+        if (this.audioCodec) {
+            medias.push(this.audioCodec,'audio',this.audioPort)
+        }
+
+        if (this.videoCodec) {
+            medias.push(this.videoCodec,'video',this.videoPort)
+        }
+
+        const sdp = {
             version:0,
             origin:{
-                username:'dotEngine',
+                username:'-',
                 sessionId: 0,
                 sessionVersion: 0,
                 netType: 'IN',
                 ipVer: 4,
                 address: this.host
             },
-            name:'dotEngine',
+            name:'-',
             timing:{
                 start:0,
                 stop:0
@@ -259,19 +331,61 @@ class Stream extends EventEmitter
                 version: 4, 
                 ip: this.host
             },
-            media:[
-            ]
+            media:medias
         };
+
+        return sdp
+
+    }
+    _mediaSDP(codec,kind,port)
+    {
+
+        let rtp = {
+            payload:codec.payload,
+            codec:codec.codec, // h264 or other 
+            rate:codec.rate
+        };
+
+        if(codec.channels){
+            rtp.encoding = codec.channels;
+        }
+        const media = {
+            rtp:[],
+            type: kind,  // audio or video 
+            protocol: 'RTP/AVP',
+            port:port,
+            payloads:codec.payload
+        };
+
+        media.rtp.push(rtp);
+
+        if(codec.parameters) {
+            let configs = [];
+
+            for(let parameter in codec.parameters) {
+                let parameterName = parameter.split(/(?=[A-Z])/).join('-').toLowerCase();
+                configs.push(parameterName + '=' + codec.parameters[parameter]);
+            }
+            
+            if(configs.length) {
+                if(!media.fmtp) {
+                    media.fmtp = [];
+                }
+                media.fmtp.push({
+                    payload: codec.payload,
+                    config: configs.join(';')
+                });	
+            }
+        }
+
+        return media
     }
 }
-
-Stream.ready = 'ready';
-Stream.started = 'started';
-Stream.closed = 'closed';
 
 
 module.exports = 
 {
-    Stream:Stream,
-    OutputTypes:OutputTypes
+    RTMPStreamer,
+    RecordStreamer,
+    getMediaPort  
 };

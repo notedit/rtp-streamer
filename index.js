@@ -2,9 +2,9 @@
 
 const streamer = require('./rtpstreamer');
 
-
 module.exports = 
 {
-    OutputTypes:streamer.OutputTypes,
-    Stream:streamer.Stream
+    RTMPStreamer:streamer.RTMPStreamer,
+    RecordStreamer:streamer.RecordStreamer,
+    getMediaPort:streamer.getMediaPort
 };
