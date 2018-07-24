@@ -1,53 +1,56 @@
 'use strict'
 
 
-const randomstring = require("randomstring")
-const Recorder = require('../index').RtpRecorder;
+const streamer = require('../index');
 const ffmpeg =  require('fluent-ffmpeg');
 
-const OutputTypes = require('../index').OutputTypes;
+
 const debug = require('debug')('debug');
 
-const recorder  = new Recorder({
-    host:'127.0.0.1',
-    rtmpbase:'rtmp://localhost/live/'
-});
 
 
-
-async function testMKVStream()
+async function testRTMPStream()
 {
 
 
 
     let audioCodec = {
-                    kind        : 'audio',
-                    name        : 'audio/OPUS',
-                    payloadType : 100,
-                    clockRate   : 48000,
-                    numChannels : 2,
+                    codec      : 'opus',
+                    payload    : 100,
+                    rate       : 48000,
+                    channels   : 2,
                 };
 
 
-    let videoCodec = 
-                {
-                    kind        : 'video',
-                    name        : 'video/VP8',
-                    payloadType : 110,
-                    clockRate   : 90000
+    let videoCodec = {
+                    codec       : 'vp8',
+                    payload     : 110,
+                    rate        : 90000
                 };
 
-    let streamId = randomstring.generate();
+    let audioPort = await streamer.getMediaPort()
+    let videoPort = await streamer.getMediaPort()
 
-    debug('create streamId ', streamId);
+    let rtmp = new streamer.RTMPStreamer(
+        {
+            rtmpURL:'rtmp://localhost/live/live',
+            audioPort: audioPort,
+            videoPort: videoPort,
+            audio: audioCodec,
+            video: videoCodec
+        }
+    )
 
-    let stream = recorder.create(streamId, OutputTypes.MKV);
+    rtmp.on('start', (line) => {
+        debug('start', line)
+    })
 
-    await stream.enableVideo(videoCodec);
-    await stream.enableAudio(audioCodec);
+    rtmp.on('close', (err) => {
+        debug('close ', err)
+    })
 
-    let videoout = 'rtp://' + stream.host + ':' + stream.videoport;
-    let audioout = 'rtp://' + stream.host + ':' + stream.audioport;
+    let videoout = 'rtp://localhost:' + videoPort;
+    let audioout = 'rtp://localhost:' + audioPort;
 
     debug('video out ',videoout);
 
@@ -71,8 +74,8 @@ async function testMKVStream()
         .on('start', function(command) {
             debug('Spawned Ffmpeg with command: ' + command);
 
-            let recordId = randomstring.generate(); 
-            stream.startRecording();
+            rtmp.start()
+
         })
         .on('error', function(err){
             debug('An error occurred: ' + err);
@@ -81,7 +84,7 @@ async function testMKVStream()
             debug(stderrLine);
         })
         .on('progress', function(progress) {
-            //debug('Processing: frames' + progress.frames + ' currentKbps ' + progress.currentKbps);
+            debug('Processing: frames' + progress.frames + ' currentKbps ' + progress.currentKbps);
         })
         .on('end',function(){
             debug('Processing finished !');
@@ -90,47 +93,58 @@ async function testMKVStream()
 };
 
 
-async function testRTMPStream()
+async function testRecordStream()
 {
     
     let audioCodec = {
-                    kind        : 'audio',
-                    name        : 'audio/OPUS',
-                    payloadType : 100,
-                    clockRate   : 48000,
-                    numChannels : 2
-                };
+            codec      : 'opus',
+            payload    : 100,
+            rate       : 48000,
+            channels   : 2,
+        };
 
 
-    let videoCodec = 
-                {
-                    kind        : 'video',
-                    name        : 'video/h264',
-                    payloadType : 110,
-                    clockRate   : 90000
-                };
+    let videoCodec = {
+            codec       : 'vp8',
+            payload     : 110,
+            rate        : 90000
+        };
 
-    let streamId = randomstring.generate();
-
-    debug('create streamId ', streamId);
-
-    let stream = recorder.create(streamId, OutputTypes.RTMP);
-
-    await stream.enableVideo(videoCodec);
-    await stream.enableAudio(audioCodec);
-
-
-    let videoout = 'rtp://' + stream.host + ':' + stream.videoport;
-    let audioout = 'rtp://' + stream.host + ':' + stream.audioport;
-
-    debug('video out ',videoout);
-
-    debug('audio out ',audioout);
     
-    
+    let audioPort = await streamer.getMediaPort();
+    let videoPort = await streamer.getMediaPort();
 
 
-    ffmpeg('./h264opus.mkv').native()
+    audioPort = 49406;
+    videoPort = 49408;
+
+    let mkv = new streamer.RecordStreamer(
+        {
+            filename: 'test.mkv',
+            audioPort: audioPort,
+            videoPort: videoPort,
+            audio: audioCodec,
+            video: videoCodec
+        }
+    )
+
+    mkv.on('start', (line) => {
+        debug('start', line)
+    })
+
+    mkv.on('close', (err) => {
+        debug('close ', err)
+    })
+
+    let videoout = 'rtp://localhost:' + videoPort;
+    let audioout = 'rtp://localhost:' + audioPort;
+
+    console.log('video out ',videoout);
+
+    console.log('audio out ',audioout);
+
+
+    let command = ffmpeg('./vp8opus.webm').native()
         .output(videoout)
         .outputOptions([
             '-vcodec copy',
@@ -146,23 +160,17 @@ async function testRTMPStream()
             '-payload_type 100'
         ])
         .on('start', function(command) {
-
-            debug('Spawned Ffmpeg with command: ' + command);
-            let recordId = randomstring.generate(); 
-            stream.startRecording();
-           
+            mkv.start()
         })
         .on('error', function(err){
-            debug('An error occurred: ' + err);
+            console.log('An error occurred: ' + err);
         })
         .on('stderr',function(stderrLine){
-            debug(stderrLine);
-        })
-        .on('progress', function(progress) {
-            //debug('Processing: frames' + progress.frames + ' currentKbps ' + progress.currentKbps);
+            console.log(stderrLine);
         })
         .on('end',function(){
-            debug('Processing finished !');
+            console.log('Processing finished !');
+            mkv.close();
         })
         .run();
 
@@ -172,7 +180,7 @@ async function testRTMPStream()
 
 debug('before start');
 
-//testMKVStream();
+//testRecordStream();
 
 testRTMPStream();
 

@@ -34,17 +34,36 @@ async function getMediaPort()
 
 class RTMPStreamer extends EventEmitter 
 {
-    /*
-    
-    */
+
+
+    /**
+	 * Create new RTMPStreamer
+	 * @param {Object} params
+     * @param {Number} params.audioPort   - audio rtp port 
+     * @param {Number} params.videoPort   - video rtp port 
+     * @param {String} params.rtmpURL     - out rtmp url 
+     * 
+     * @param {Object} params.audio       - audio codec info 
+     * @param {Number} params.audio.payload  - audio rtp payload
+     * @param {Number} params.audio.rate  - audio rate 
+     * @param {String} params.audio.codec   - audio rtp code name, ('opus', 'aac')
+     * @param {Number?} params.audio.channels - audio channels,  (1  or  2)
+     * @param {Object?} params.audio.parameters  - audio other sdp parameters 
+     *  
+     * @param {Object} params.video       - video codec info 
+     * @param {Number} params.video.payload  - video rtp payload
+     * @param {Number} params.video.rate   - video rate
+     * @param {String} params.video.codec   - video rtp code name, ('h264', 'vp8')
+     * @param {Object?} params.video.parameters  - audio other sdp parameters  
+	 */
     constructor(options)
     {
         super();
 
         this.rtmpURL = options.rtmpURL;
        
-        this.audioCodec = null;
-        this.videoCodec = null;
+        this.audioCodec = options.audio;
+        this.videoCodec = options.video;
         this.audioPort = options.audioPort || null;
         this.videoPort = options.videoPort || null;
         this.command = null;
@@ -55,29 +74,35 @@ class RTMPStreamer extends EventEmitter
 
     start() 
     {
+
+        console.log(this.sdp);
+
         let sdpstr =  transform.write(this.sdp);
         let sdpStream = new stream.PassThrough();
         sdpStream.end(new Buffer(sdpstr));
-
-        this.command = ffmpeg(sdpStream)
 
         // input options 
         let inputOptions = [
             '-protocol_whitelist', 
             'file,pipe,udp,rtp', 
             '-f', 'sdp',
-            '-analyzeduration 11000000',
+            '-analyzeduration 2147483647',
+            '-probesize 2147483647'
         ];
 
         if (this.audioCodec && this.audioCodec.codec === 'opus') {
             inputOptions.push('-acodec libopus')
         }
 
-        this.command.inputOptions(inputOptions)
+        this.command = ffmpeg(sdpStream)
+            .inputOptions(inputOptions)
             .on('start', (commandLine) => {
                 console.log('ffmpeg command : ',  commandLine);
                 this.state = STATE.started;
                 this.emit('start', commandLine)
+            })
+            .on('progress', function(progress) {
+                console.log('Processing: frames' + progress.frames + ' currentKbps ' + progress.currentKbps);
             })
             .on('error', (err, stdout, stderr) => {
                 console.error('ffmpeg stdout: ', stdout);
@@ -98,6 +123,7 @@ class RTMPStreamer extends EventEmitter
             } else {
                 outputOptions.push('-vcodec libx264');
                 outputOptions.push('-preset ultrafast');
+                outputOptions.push('-tune zerolatency');
                 outputOptions.push('-crf 0');
             }
         }
@@ -109,6 +135,8 @@ class RTMPStreamer extends EventEmitter
             outputOptions.push('-copyts');
             outputOptions.push('-r:v 20');
         }
+
+        outputOptions.push('-f flv')
 
         this.command.output(this.rtmpURL)
             .outputOptions(outputOptions);
@@ -136,11 +164,13 @@ class RTMPStreamer extends EventEmitter
         const medias = [];
 
         if (this.audioCodec) {
-            medias.push(this.audioCodec,'audio',this.audioPort)
+            let media = this._mediaSDP(this.audioCodec, 'audio', this.audioPort)
+            medias.push(media)
         }
 
         if (this.videoCodec) {
-            medias.push(this.videoCodec,'video',this.videoPort)
+            let media = this._mediaSDP(this.videoCodec, 'video', this.videoPort)
+            medias.push(media)
         }
 
         const sdp = {
@@ -151,7 +181,7 @@ class RTMPStreamer extends EventEmitter
                 sessionVersion: 0,
                 netType: 'IN',
                 ipVer: 4,
-                address: this.host
+                address: '127.0.0.1'
             },
             name:'-',
             timing:{
@@ -160,7 +190,7 @@ class RTMPStreamer extends EventEmitter
             },
             connection: {
                 version: 4, 
-                ip: this.host
+                ip: '127.0.0.1'
             },
             media:medias
         };
@@ -216,14 +246,33 @@ class RTMPStreamer extends EventEmitter
 
 class RecordStreamer extends EventEmitter 
 {
+
+    /**
+	 * Create new RecordStreamer
+	 * @param {Object} params
+     * @param {Number} params.audioPort   - audio rtp port 
+     * @param {Number} params.videoPort   - video rtp port 
+     * @param {String} params.filename    - out record filename,  only xxx/xxxx.mkv support now 
+     * 
+     * @param {Object} params.audio       - audio codec info 
+     * @param {Number} params.audio.payload  - audio rtp payload
+     * @param {Number} params.audio.rate  - audio rate 
+     * @param {String} params.audio.codec   - audio rtp code name, ('opus', 'aac')
+     * @param {Number?} params.audio.channels - audio channels,  (1  or  2)
+     * @param {Object?} params.audio.parameters  - audio other sdp parameters 
+     *  
+     * @param {Object} params.video       - video codec info 
+     * @param {Number} params.video.payload  - video rtp payload
+     * @param {Number} params.video.rate   - video rate
+     * @param {String} params.video.codec   - video rtp code name, ('h264', 'vp8')
+     * @param {Object?} params.video.parameters  - audio other sdp parameters  
+	 */
     constructor(options)
     {
         super();
 
-        this.id = options.id;
-
-        this.audioCodec = null;
-        this.videoCodec = null;
+        this.audioCodec = options.audio;
+        this.videoCodec = options.video;
         this.audioPort = options.audioPort || null;
         this.videoPort = options.videoPort || null;
         this.command = null;
@@ -236,38 +285,45 @@ class RecordStreamer extends EventEmitter
 
     start() 
     {
+
+        console.log(this.sdp);
+
         let sdpstr =  transform.write(this.sdp);
         let sdpStream = new stream.PassThrough();
         sdpStream.end(new Buffer(sdpstr));
 
-        this.command = ffmpeg(sdpStream)
-
+        console.log(sdpstr);
+        return;
         // input options 
         let inputOptions = [
             '-protocol_whitelist', 
             'file,pipe,udp,rtp', 
             '-f', 'sdp',
-            '-analyzeduration 11000000',
+            '-acodec libopus',
+            '-analyzeduration 2147483647',
+            '-probesize 2147483647'
         ];
 
-        if (this.audioCodec && this.audioCodec.codec === 'opus') {
-            inputOptions.push('-acodec libopus')
-        }
-
-        this.command.inputOptions(inputOptions)
+        this.command = ffmpeg(sdpStream)
+            .inputOptions(inputOptions)
             .on('start', (commandLine) => {
+
                 console.log('ffmpeg command : ',  commandLine);
                 this.state = STATE.started;
                 this.emit('start', commandLine)
             })
+            .on('progress', function(progress) {
+                console.log('Processing:', progress);
+            })
             .on('error', (err, stdout, stderr) => {
+                console.error('error ', err);
                 console.error('ffmpeg stdout: ', stdout);
                 console.error('ffmpeg stderr: ', stderr);
                 this.close(err);
             })
-            .on('end',() => {
+            .on('end',(err) => {
                 console.log('ended');
-                this.close(null);
+                this.close(err);
             });
 
         let outputOptions = [
@@ -305,11 +361,13 @@ class RecordStreamer extends EventEmitter
         const medias = [];
 
         if (this.audioCodec) {
-            medias.push(this.audioCodec,'audio',this.audioPort)
+            let media = this._mediaSDP(this.audioCodec, 'audio', this.audioPort)
+            medias.push(media)
         }
 
         if (this.videoCodec) {
-            medias.push(this.videoCodec,'video',this.videoPort)
+            let media = this._mediaSDP(this.videoCodec, 'video', this.videoPort)
+            medias.push(media)
         }
 
         const sdp = {
@@ -320,7 +378,7 @@ class RecordStreamer extends EventEmitter
                 sessionVersion: 0,
                 netType: 'IN',
                 ipVer: 4,
-                address: this.host
+                address: '127.0.0.1'
             },
             name:'-',
             timing:{
@@ -329,7 +387,7 @@ class RecordStreamer extends EventEmitter
             },
             connection: {
                 version: 4, 
-                ip: this.host
+                ip: '127.0.0.1'
             },
             media:medias
         };
