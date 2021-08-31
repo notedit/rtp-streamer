@@ -25,7 +25,7 @@ npm install rtprecorder
 ```
 
 
-let videoCodec =
+let audioCodec =
         {
         kind        : 'audio',
         name        : 'audio/opus',
@@ -33,7 +33,7 @@ let videoCodec =
         clockRate   : 48000
         };
 
-let audioCodec =  
+let videoCodec =  
         {
         kind        : 'video',
         name        : 'video/vp8',
